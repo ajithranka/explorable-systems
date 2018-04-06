@@ -1,13 +1,17 @@
 const g = 9.80665
 
 let canvas, arrow
-let simulation, pendulum, angleGraph, energyGraph, timer
+let simulation, pendulum,
+    angleGraph, energyGraph,
+    abstractAngleGraph, abstractEnergyGraph,
+    timer
 let lSlider, mSlider, theta0Slider
 
 const state = {
   timerRunning: false,
   angleGraphHover: false,
-  angleGraphTheta: 0
+  angleGraphTheta: 0,
+  levelUp: false
 }
 
 function preload() {
@@ -33,6 +37,8 @@ function setup() {
   pendulum = new PendulumView(180, 235)
   angleGraph = new AngleGraph(340, 225, 340, 150)
   energyGraph = new EnergyGraph(740, 225, 140, 150)
+  abstractAngleGraph = new AbstractAngleGraph(340, 70, 340, 150)
+  abstractEnergyGraph = new AbstractEnergyGraph(740, 70, 200, 150)
 
   timer = new Timer()
 
@@ -48,6 +54,12 @@ function draw() {
 
   timer.update()
 
+  if(state.levelUp) {
+    image(arrow, 460, 250)
+    abstractAngleGraph.draw()
+    abstractEnergyGraph.draw()
+  }
+
   textSize(12)
   fill("#6C6C6C")
   stroke("#6C6C6C")
@@ -60,6 +72,18 @@ function draw() {
 function keyPressed() {
   if(key == ' ')
     state.timerRunning = !state.timerRunning
+  if(keyCode == UP_ARROW && !state.levelUp) {
+    state.levelUp = true
+    pendulum.y = pendulum.y + 150
+    angleGraph.y = angleGraph.y + 150
+    energyGraph.y = energyGraph.y + 150
+  }
+  if(keyCode == DOWN_ARROW && state.levelUp) {
+    state.levelUp = false
+    pendulum.y = pendulum.y - 150
+    angleGraph.y = angleGraph.y - 150
+    energyGraph.y = energyGraph.y - 150
+  }
 }
 
 function mousePressed() {
@@ -386,5 +410,197 @@ class EnergyGraph {
     const l = simulation.l, m = simulation.m, theta0 = simulation.theta0
     const velocity = - sqrt(g/l) * sqrt(sq(theta0) - sq(theta))
     return 1/2.0 * m * sq(velocity)
+  }
+}
+
+class AbstractAngleGraph {
+  constructor(x, y, w, h) {
+    this.x = x
+    this.y = y
+    this.w = w
+    this.h = h
+
+    this.shadowSimulation = new PendulumSimulation(0)
+  }
+
+  draw() {
+    push()
+
+    translate(this.x, this.y)
+
+    // x and y axis
+    fill("#6C6C6C")
+    stroke("#6C6C6C")
+    strokeWeight(2)
+    line(0, this.h/2, this.w, this.h/2)
+    line(0, 0, 0, this.h)
+
+    // x axis ticks (time)
+    textSize(12)
+    for (let t = 1; t <= 10; t++) {
+      const tMapped = map(t, 0, 10, 0, this.w)
+      strokeWeight(2)
+      line(tMapped, this.h/2, tMapped, this.h/2 + 4)
+      strokeWeight(1)
+      text(t, tMapped - 3, this.h/2 + 16)
+    }
+
+    // y axis ticks (angle)
+    for (let angle = -PI/4; angle <= PI/4; angle += PI/12) {
+      const angleMapped = map(angle, -PI/4, PI/4, this.h, 0)
+      strokeWeight(2)
+      line(0, angleMapped, -4, angleMapped)
+      strokeWeight(1)
+      text(nfp(round(degrees(angle)), 1, 0), -30, angleMapped + 5)
+    }
+
+    // axis labels
+    textSize(14)
+    text("time (s)", this.w - 40, this.h/2 - 10)
+    text("angle (deg)", 10, -10)
+
+
+    // all possible curves
+    for (let angle = 0; angle <= PI/4; angle += PI/24) {
+      this.drawCurve(angle, "#2AA198")
+    }
+
+    // current curve
+    const currentTheta = simulation.theta0
+    this.drawCurve(currentTheta, "#CB4B16")
+
+    // on hover and mouse pressed
+    if (mouseX > this.x && mouseX < this.x + this.w && mouseY > this.y && mouseY < this.y + this.h/2 && mouseIsPressed) {
+      state.timerRunning = false
+
+      const y = mouseY - this.y
+      const yMapped = map(y, 0, this.h/2, PI/4, 0)
+      for (let i = 0; i < 7; i++) {
+        if (abs(yMapped - i * PI/24) < PI/48) {
+          const theta = i * PI/24
+
+          stroke("#CB4B16")
+          strokeWeight(1)
+          const yLine = map(i * PI/24, 0, PI/4, this.h/2, 0)
+          line(0, yLine, this.w, yLine);
+
+          simulation.updateTheta0(theta)
+        }
+      }
+    }
+
+    pop()
+  }
+
+  drawCurve(theta, graphColor) {
+    this.shadowSimulation.updateTheta0(theta)
+
+    noFill()
+    strokeWeight(2)
+    stroke(graphColor)
+    beginShape()
+    for (let j = 0; j < 1000; j++) {
+      const t = j * 0.01;
+      const tMapped = map(t, 0, 10, 0, this.w)
+      const yMapped = map(this.shadowSimulation.data[j], -PI/4, PI/4, this.h, 0);
+      vertex(tMapped, yMapped)
+    }
+    endShape()
+  }
+}
+
+class AbstractEnergyGraph {
+  constructor(x, y, w, h) {
+    this.x = x
+    this.y = y
+    this.w = w
+    this.h = h
+  }
+
+  draw() {
+    push()
+
+    translate(this.x, this.y)
+
+    // x and y axis
+    noFill()
+    stroke("#6C6C6C")
+    strokeWeight(2)
+    line(0, this.h/2, this.w, this.h/2)
+    line(this.w/2, 0, this.w/2, this.h)
+
+    // x axis ticks
+    textSize(12)
+    for (let angle = -PI/4; angle <= PI/4; angle += PI/12) {
+      const angleMapped = map(angle, -PI/4, PI/4, 0, this.w)
+      strokeWeight(2)
+      line(angleMapped, this.h/2, angleMapped, this.h/2 + 4)
+      strokeWeight(1)
+      if (angle != 0) text(nfp(round(degrees(angle)), 1, 0), angleMapped - 13, this.h/2 + 16)
+    }
+
+    // y axis ticks
+    textSize(12)
+    const maxEnergy = 1 - cos(PI/4)
+    const stepLength = maxEnergy/3
+    for (let i = -maxEnergy; i <= maxEnergy; i += stepLength) {
+      const iMapped = map(i, -maxEnergy, maxEnergy, this.h, 0)
+      strokeWeight(2)
+      line(this.w/2, iMapped, this.w/2 - 4, iMapped)
+      strokeWeight(1)
+      if (!(abs(i) < 0.01)) text(nfp(i, 1, 3), this.w/2 - 45, iMapped + 5)
+    }
+
+    // axis labels
+    textSize(14)
+    strokeWeight(1)
+    text("initial angle", this.w - 40, this.h/2 - 10)
+    text("total energy", this.w/2, -10)
+
+    // data points
+    noFill()
+    strokeWeight(2)
+    stroke("#2AA198")
+    beginShape()
+    for (let i = -PI/4; i <= PI/4; i = i + PI/(2400)) {
+      const energy = simulation.l - simulation.l * cos(i)
+      const energyMapped = map(energy, -maxEnergy, maxEnergy, this.h, 0)
+      const iMapped = map(i, -PI/4, PI/4, 0, this.w);
+      vertex(iMapped, energyMapped)
+    }
+    endShape()
+
+    // on hover and mouse pressed
+    if (mouseX > this.x && mouseX < this.x + this.w && mouseY > this.y && mouseY < this.y + this.h/2 && mouseIsPressed) {
+      state.timerRunning = false
+
+      const x = mouseX - this.x
+      const xMapped = map(x, 0, this.w, -PI/4, PI/4)
+      simulation.updateTheta0(xMapped)
+
+      this.highlightPoint(xMapped)  // lag between frame updates
+
+      stroke("#2AA198")
+      strokeWeight(1)
+      line(x, 0, x, this.h/2)
+    } else {
+      // highlight current point
+      const currentTheta = simulation.theta0
+      this.highlightPoint(currentTheta)
+    }
+
+    pop()
+  }
+
+  highlightPoint(theta) {
+    const maxEnergy = 1 - cos(PI/4)
+
+    const thetaMapped = map(theta, -PI/4, PI/4, 0, this.w)
+    const energy = simulation.l - simulation.l * cos(theta)
+    const energyMapped = map(energy, -maxEnergy, maxEnergy, this.h, 0)
+
+    stroke("#CB4B16")
+    strokeWeight(8)
+    point(thetaMapped, energyMapped)
   }
 }
