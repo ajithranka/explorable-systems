@@ -5,7 +5,6 @@ let simulation, pendulum,
     angleGraph, energyGraph,
     abstractAngleGraph, abstractEnergyGraph,
     timer
-let lSlider, mSlider, theta0Slider
 
 const state = {
   timerRunning: false,
@@ -20,20 +19,9 @@ function preload() {
 
 function setup() {
   canvas = createCanvas(1024, 640)
+  canvas.parent('app')
 
-  mSlider = createSlider(1, 2, 2, 0.25)
-  mSlider.position(20, 20)
-  mSlider.changed(massChanged)
-
-  lSlider = createSlider(1, 2, 2, 0.25)
-  lSlider.position(20, 40)
-  lSlider.changed(lengthChanged)
-
-  theta0Slider = createSlider(-PI/4, PI/4, PI/4, PI/12)
-  theta0Slider.position(20, 60)
-  theta0Slider.changed(theta0Changed)
-
-  simulation = new PendulumSimulation(theta0Slider.value())
+  simulation = new PendulumSimulation(PI/8)
   pendulum = new PendulumView(180, 235)
   angleGraph = new AngleGraph(340, 225, 340, 150)
   energyGraph = new EnergyGraph(740, 225, 140, 150)
@@ -43,6 +31,7 @@ function setup() {
   timer = new Timer()
 
   textFont("Avenir Next")
+  smooth()
 }
 
 function draw() {
@@ -64,9 +53,8 @@ function draw() {
   fill("#6C6C6C")
   stroke("#6C6C6C")
   strokeWeight(1)
-  text("m = " + mSlider.value() + " kg", 160, 32)
-  text("l = " + lSlider.value() + " m", 160, 52)
-  text("θ = " + nfp(round(degrees(theta0Slider.value())), 1, 0) + " deg", 160, 72)
+  text("SPACE to play.", 30, 20)
+  text("UP/DOWN for more.", 30, 40)
 }
 
 function keyPressed() {
@@ -98,21 +86,6 @@ function mouseReleased() {
   pendulum.released()
 }
 
-function massChanged() {
-  const newMass = mSlider.value()
-  simulation.updateMass(newMass)
-}
-
-function lengthChanged() {
-  const newLength = lSlider.value()
-  simulation.updateLength(newLength)
-}
-
-function theta0Changed() {
-  const newTheta0 = theta0Slider.value()
-  simulation.updateTheta0(newTheta0)
-}
-
 class Timer {
   constructor() {
     this.t     = 0.0
@@ -135,9 +108,9 @@ class Timer {
 
 class PendulumSimulation {
   constructor(theta0) {
-    this.m = mSlider.value()
-    this.l = lSlider.value()
-    this.theta0 = theta0Slider.value()
+    this.m = 1.0
+    this.l = 1.0
+    this.theta0 = theta0
     this.data = Array(1000)
 
     this.computeData()
@@ -151,17 +124,7 @@ class PendulumSimulation {
     }
   }
 
-  updateMass(m) {
-    this.m = m
-    this.computeData()
-  }
-
-  updateLength(l) {
-    this.l = l
-    this.computeData()
-  }
-
-  updateTheta0(theta0) {
+  update(theta0) {
     this.theta0 = theta0
     this.computeData()
   }
@@ -200,8 +163,8 @@ class PendulumView {
       fill("#E5E5E5")
     else
       noFill()
-    ellipse(0, simulation.l * 60, 30 + simulation.m * 10)
-    line(0, 0, 0, simulation.l * 60)
+    ellipse(0, simulation.l * 120, 30 + simulation.m * 7)
+    line(0, 0, 0, simulation.l * 120)
 
     pop()
   }
@@ -220,7 +183,7 @@ class PendulumView {
       const dtheta = atan2(previous.y, previous.x) - atan2(current.y, current.x)
       if (abs(simulation.theta0 + dtheta) < PI/4) {
         const theta0 = simulation.theta0 + dtheta
-        simulation.updateTheta0(theta0)
+        simulation.update(theta0)
         this.theta = theta0
       }
       this.isDragged = true
@@ -373,16 +336,15 @@ class EnergyGraph {
 
     this.kinetic = this.total - this.potential
 
-    const maxEnergy = 2 * PI/4 * g
+    const maxEnergy = this.calculatePotential(PI/4)
     const potentialMapped = map(this.potential, 0, maxEnergy, this.h, 0)
     const kineticMapped = map(this.kinetic, 0, maxEnergy, this.h, 0)
     const totalMapped = map(this.total, 0, maxEnergy, this.h, 0)
 
     // bars
     noStroke()
-    fill("#CB4B16")
+    fill("#6C6C6C")
     rect(this.w/3 - 15, potentialMapped, 30, this.h - potentialMapped)
-    fill("#2AA198")
     rect(2*this.w/3 - 15, kineticMapped, 30, this.h - kineticMapped)
 
     // topline
@@ -479,12 +441,12 @@ class AbstractAngleGraph {
         if (abs(yMapped - i * PI/24) < PI/48) {
           const theta = i * PI/24
 
-          stroke("#CB4B16")
-          strokeWeight(1)
+          stroke("#6C6C6C")
+          strokeWeight(2)
           const yLine = map(i * PI/24, 0, PI/4, this.h/2, 0)
           line(0, yLine, this.w, yLine);
 
-          simulation.updateTheta0(theta)
+          simulation.update(theta)
         }
       }
     }
@@ -493,7 +455,7 @@ class AbstractAngleGraph {
   }
 
   drawCurve(theta, graphColor) {
-    this.shadowSimulation.updateTheta0(theta)
+    this.shadowSimulation.update(theta)
 
     noFill()
     strokeWeight(2)
@@ -576,12 +538,12 @@ class AbstractEnergyGraph {
 
       const x = mouseX - this.x
       const xMapped = map(x, 0, this.w, -PI/4, PI/4)
-      simulation.updateTheta0(xMapped)
+      simulation.update(xMapped)
 
       this.highlightPoint(xMapped)  // lag between frame updates
 
-      stroke("#2AA198")
-      strokeWeight(1)
+      stroke("#6C6C6C")
+      strokeWeight(2)
       line(x, 0, x, this.h/2)
     } else {
       // highlight current point
